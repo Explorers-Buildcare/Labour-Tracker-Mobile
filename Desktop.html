@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Armstrong Creek Landscape — Timesheet & Cost Tracker (Supabase)</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#f6f8fa; --panel:#ffffff; --ink:#1f2a37; --muted:#6b7785;
+    --line:#dde4ea; --accent:#1f6fb2; --accent-soft:#eaeef2;
+    --warn:#b4541f; --warn-soft:#fbeee6; --l2:#1f6fb2; --l1e:#3a6ea5; --l1w:#7c8a9c;
+    --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  header.app{background:var(--accent);color:#fff;padding:14px 20px;display:flex;align-items:center;
+    justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header.app h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.2px}
+  header.app .sub{font-size:12px;opacity:.85}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .toolbar .who{font-size:12px;opacity:.9;margin-right:4px}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);
+    padding:7px 12px;border-radius:7px;transition:.15s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.ghost{background:transparent;border-color:rgba(255,255,255,.5);color:#fff}
+  button.ghost:hover{background:rgba(255,255,255,.12);color:#fff}
+  button.sm{padding:3px 8px;font-size:12px;border-radius:6px}
+  .tabs{display:flex;gap:4px;padding:10px 20px 0;background:var(--bg);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .tab{padding:9px 16px;border:1px solid transparent;border-bottom:none;border-radius:9px 9px 0 0;
+    background:transparent;color:var(--muted);font-weight:500}
+  .tab.active{background:var(--panel);color:var(--accent);border-color:var(--line);box-shadow:0 -2px 6px rgba(0,0,0,.03)}
+  main{padding:18px 20px 60px}
+  .view{display:none}.view.active{display:block}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+    padding:16px;margin-bottom:16px}
+  .panel h2{margin:0 0 4px;font-size:15px}
+  .panel .hint{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;min-width:560px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  thead th{background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:12.5px}
+  tr.zone td{background:#eef0f2;font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:12px}
+  tr.zone.L2 td{box-shadow:inset 4px 0 0 var(--l2)}
+  tr.zone.L1E td{box-shadow:inset 4px 0 0 var(--l1e)}
+  tr.zone.L1W td{box-shadow:inset 4px 0 0 var(--l1w)}
+  td.task{min-width:220px;position:sticky;left:0;background:var(--panel);z-index:1;font-weight:500}
+  th.taskth{position:sticky;left:0;z-index:3;background:var(--accent-soft)}
+  input.txt,select.txt{padding:6px 8px;border:1px solid var(--line);border-radius:7px;font:inherit;width:100%}
+  select.big-sel{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;min-width:150px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .row-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600}
+  .pill.L2{background:rgba(105,120,138,.16);color:var(--l2)}
+  .pill.L1E{background:rgba(105,120,138,.16);color:var(--l1e)}
+  .pill.L1W{background:rgba(105,120,138,.16);color:var(--l1w)}
+  .pill.W{background:var(--warn-soft);color:var(--warn)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .right{text-align:right}
+  .big{font-size:22px;font-weight:700}
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .kpi .card{background:var(--accent-soft);border-radius:10px;padding:14px}
+  .kpi .card.warn{background:var(--warn-soft)}
+  .kpi .card .lbl{font-size:11.5px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+  .kpi .card.warn .lbl{color:var(--warn)}
+  .muted{color:var(--muted)}
+  .tag{font-size:11px;color:var(--muted)}
+  footer.note{padding:14px 20px;color:var(--muted);font-size:12px;text-align:center}
+  .flexspace{flex:1}
+  .danger:hover{border-color:var(--warn);color:var(--warn)}
+  td.gcell{min-width:120px;padding:3px}
+  .cellline{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:2px 5px;border-radius:5px}
+  .cellline:hover{background:var(--accent-soft)}
+  .cellline .nm{font-size:12.5px}
+  .cellline .nm b{font-variant-numeric:tabular-nums}
+  .cellline .ed{visibility:hidden;border:none;background:none;cursor:pointer;color:var(--accent);font-size:13px;padding:0 2px;line-height:1}
+  .cellline:hover .ed{visibility:visible}
+  .cell-add{visibility:hidden;margin-top:2px;width:100%;border:1px dashed var(--line);border-radius:5px;
+    font:inherit;font-size:11.5px;color:var(--muted);padding:2px;background:transparent}
+  td.gcell:hover .cell-add{visibility:visible}
+  .celltot{font-size:10.5px;color:var(--muted);text-align:right;padding:0 5px}
+  .overlay{display:none;position:fixed;inset:0;background:rgba(20,30,25,.45);z-index:50;
+    align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto}
+  .modal{background:var(--panel);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.3);
+    width:100%;max-width:920px;padding:18px}
+  .modalhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+  .modalclose{margin-left:auto}
+  .days{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .day{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .day.weekend{background:#fafbfa}
+  .day .dhead{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;
+    background:var(--accent-soft);font-weight:600;color:var(--accent);font-size:13px}
+  .day .dhead .dt{font-weight:400;color:var(--muted);font-size:11.5px}
+  .day .dbody{padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  .alloc{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:7px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .alloc select{flex:1 1 100%;min-width:0;padding:5px 6px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
+  .alloc .hwrap{display:flex;align-items:center;gap:3px;flex:0 0 auto}
+  .alloc .hwrap label{font-size:11px;color:var(--muted)}
+  .alloc input.hrs{width:54px;text-align:right;padding:5px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
+  .alloc input.note{flex:1 1 80px;min-width:0;padding:5px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
+  .alloc.wastage{border-color:var(--warn);background:var(--warn-soft)}
+  .alloc.wastage select{color:var(--warn);font-weight:600;background:#fff}
+  .alloc.empty{border-color:var(--warn)}
+  .alloc.empty select{border-color:var(--warn);background:var(--warn-soft)}
+  .alloc .del{color:var(--muted);border:none;background:none;padding:0 2px;font-size:15px;cursor:pointer;flex:0 0 auto;margin-left:auto}
+  .alloc .del:hover{color:var(--warn)}
+  .alloc.locked{background:#eef0f2;border-color:#cdddd2}
+  .alloc .appr{flex:0 0 auto;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;margin-left:auto}
+  .alloc .appr.unappr{background:#fff;color:var(--accent);font-size:14px;font-weight:700}
+  .alloc .lockbadge{margin-left:auto;color:var(--accent);font-size:12px;font-weight:600;flex:0 0 auto}
+  .alloc .stamp{flex:1 1 100%;font-size:11px;color:var(--muted)}
+  .alloc:not(.locked) .del{margin-left:auto}
+  .alloc.locked .appr{margin-left:auto}
+  .addrow{font-size:12px;color:var(--accent);border:none;background:none;padding:4px 0;text-align:left;cursor:pointer}
+  .dtot{font-size:11.5px;color:var(--muted)}
+  .weektot{margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);
+    display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .weektot b{font-size:17px}
+  /* login + status */
+  .login{position:fixed;inset:0;background:var(--bg);z-index:80;display:flex;align-items:center;justify-content:center;padding:20px}
+  .loginbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+    padding:26px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px}
+  .loginbox h2{margin:0;font-size:18px;color:var(--accent)}
+  .loginbox p{margin:0 0 6px;font-size:13px;color:var(--muted)}
+  .loginbox input{padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit}
+  .loginbox button{background:var(--accent);border-color:var(--accent);color:#fff;padding:10px;font-weight:600}
+  .loginbox button:hover{filter:brightness(1.08);color:#fff}
+  .err{color:var(--warn);font-size:12.5px;min-height:16px}
+  #banner{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:90;
+    background:var(--warn);color:#fff;padding:9px 16px;border-radius:9px;box-shadow:var(--shadow);font-size:13px;max-width:90%}
+  #loading{position:fixed;inset:0;background:rgba(244,246,244,.85);z-index:70;display:none;align-items:center;justify-content:center;color:var(--muted)}
+  .empty-state{padding:24px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<!-- LOGIN -->
+<div class="login" id="login" style="display:none">
+  <form class="loginbox" id="loginForm">
+    <h2>Armstrong Creek Tracker</h2>
+    <p>Sign in with your shared crew login.</p>
+    <input id="email" type="email" placeholder="Email" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit" id="loginBtn">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+<div id="loading">Loading…</div>
+<div id="banner"></div>
+<div class="login" id="crewNote" style="display:none">
+  <form class="loginbox" style="text-align:center" onsubmit="return false">
+    <h2>Use the phone timesheet</h2>
+    <p>This admin view is for office/management. To enter your hours, open the
+       timesheet on your phone and sign in with this same login.</p>
+    <button type="button" id="crewSignout">Sign out</button>
+  </form>
+</div>
+
+<header class="app">
+  <div>
+    <h1>Armstrong Creek Landscape</h1>
+    <div class="sub">Weekly hours per item · live on Supabase · shared across the crew</div>
+  </div>
+  <div class="toolbar">
+    <span class="who" id="who"></span>
+    <button class="ghost" id="btnReload">Reload</button>
+    <button class="ghost" id="btnExport">Backup JSON</button>
+    <button class="ghost" id="btnCsvTs">Timesheet CSV</button>
+    <button class="ghost" id="btnCsv">Costing CSV</button>
+    <button class="ghost" id="btnSignout">Sign out</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-v="hours">Weekly hours</button>
+  <button class="tab" data-v="people">People</button>
+  <button class="tab" data-v="materials">Materials</button>
+  <button class="tab" data-v="summary">Summary</button>
+  <button class="tab" data-v="settings">Settings</button>
+</nav>
+
+<main>
+  <section class="view active" id="v-hours">
+    <div class="panel">
+      <div class="row-inline" style="margin-bottom:10px">
+        <h2 style="margin:0">Hours by item &times; week</h2>
+        <span class="flexspace"></span>
+        <span class="tag">Open a week:</span>
+        <select class="big-sel" id="openPerson"></select>
+        <select class="big-sel" id="openWeek"></select>
+        <button class="sm" id="btnOpenWeek">Open</button>
+        <button class="sm" id="btnAddWeek">+ Add week</button>
+      </div>
+      <p class="hint">Each cell shows who worked that item that week and their hours.
+        <b>Hover a person's hours and click the&nbsp;✎</b> to open their whole week — the popup is the only place
+        hours are edited. Use <b>＋</b> in a cell (on hover) to add someone to that item.</p>
+      <div class="scroll"><table id="gridTable"></table></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-people">
+    <div class="panel">
+      <div class="row-inline"><h2 style="margin:0">People</h2><span class="flexspace"></span>
+        <button class="sm" id="btnAddPerson">+ Add person</button></div>
+      <p class="hint">Everyone who can appear on a timesheet. Each entry links to a person; their hourly rate drives
+        labour cost. Set someone inactive to hide them from the pickers without losing history.</p>
+      <div class="scroll"><table id="peopleTable"></table></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-materials">
+    <div class="panel">
+      <div class="row-inline"><h2 style="margin:0">Materials per task</h2><span class="flexspace"></span>
+        <button class="sm" id="btnAddTaskMat">+ Add task</button></div>
+      <p class="hint">Assign material quantities to each task (qty &times; unit cost). Manage the catalogue under Settings.</p>
+      <div class="scroll"><table id="matTable"></table></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-summary">
+    <div class="panel"><h2>Project totals</h2><div class="kpi" id="kpis"></div></div>
+    <div class="grid2">
+      <div class="panel"><h2>Cost by zone</h2><div class="scroll"><table id="zoneTable"></table></div></div>
+      <div class="panel"><h2>Hours &amp; wastage by person</h2><div class="scroll"><table id="personTable"></table></div></div>
+    </div>
+    <div class="panel">
+      <h2>Cost by task</h2>
+      <p class="hint">Labour + materials per task — the costing breakdown for quoting / reconciliation.</p>
+      <div class="scroll"><table id="taskCostTable"></table></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-settings">
+    <div class="grid2">
+      <div class="panel">
+        <div class="row-inline"><h2 style="margin:0">Material catalogue</h2><span class="flexspace"></span>
+          <button class="sm" id="btnAddMat">+ Add</button></div>
+        <p class="hint">Reusable list of materials with unit + unit cost ($).</p>
+        <div class="scroll"><table id="matCatTable"></table></div>
+      </div>
+      <div class="panel">
+        <div class="row-inline"><h2 style="margin:0">Tasks</h2><span class="flexspace"></span>
+          <button class="sm" id="btnAddTask">+ Add task</button></div>
+        <p class="hint">The task list, grouped by zone (L2 / L1E / L1W).</p>
+        <div class="scroll" style="max-height:360px"><table id="taskTable"></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Connection</h2>
+      <p class="hint">Connected to Supabase project <code id="projUrl"></code>. Data is shared live across everyone
+        signed in with the crew login. Use <b>Reload</b> to pull the latest if someone else has been editing.</p>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="overlay"><div class="modal"><div id="modalBody"></div></div></div>
+<div class="overlay" id="invOverlay"><div class="modal" style="max-width:560px"><div id="invBody"></div></div></div>
+<footer class="note">Live on Supabase · changes save as you type · Reload to see others' edits.</footer>
+
+<script>
+/* ============================================================
+   SUPABASE CONNECTION
+   ============================================================ */
+const SUPABASE_URL="https://kncijdujuvlzjfenstba.supabase.co";
+const SUPABASE_KEY="sb_publishable_YAOafvAAp6ZUbSXEAMQPMA_INEUnJZl";
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let PROJECT_ID=null;
+
+/* in-memory mirror of the DB, in the shape the UI uses */
+let S={tasks:[],weeks:[],people:[],materials:[],timesheet:[],taskMaterials:{}};
+let MODAL=null;
+let IS_ADMIN=false, CAN_APPROVE=false, CAN_SEE_COSTS=false, MY_LEVEL=0, MY_UID=null, MY_PERSON_ID=null;
+const ROLE_NAMES={1:"Trade",2:"Foreman",3:"PM",4:"Admin"};
+
+/* ---- helpers ---- */
+const fmt=(n)=>"$"+(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+const fmt1=(n)=>(n||0).toLocaleString(undefined,{maximumFractionDigits:1});
+const esc=(s)=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+const ZONES=["L2","L1E","L1W"];
+const person=(id)=>S.people.find(p=>p.id===id);
+const task=(id)=>S.tasks.find(t=>t.id===id);
+const weeksSorted=()=>[...S.weeks].sort((a,b)=>a.monday<b.monday?-1:1);
+function uuid(){
+  if(window.crypto&&crypto.randomUUID){try{return crypto.randomUUID();}catch(e){}}
+  let b=new Uint8Array(16);
+  if(window.crypto&&crypto.getRandomValues)crypto.getRandomValues(b);else for(let i=0;i<16;i++)b[i]=Math.floor(Math.random()*256);
+  b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;
+  const h=[];for(let i=0;i<16;i++)h.push(b[i].toString(16).padStart(2,"0"));
+  return h.slice(0,4).join("")+"-"+h.slice(4,6).join("")+"-"+h.slice(6,8).join("")+"-"+h.slice(8,10).join("")+"-"+h.slice(10,16).join("");
+}
+function fmtDate(dt){return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
+function isoAdd(iso,n){const a=iso.split("-").map(Number);const dt=new Date(a[0],a[1]-1,a[2]);dt.setDate(dt.getDate()+n);return fmtDate(dt);}
+const DAYNAMES=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+function prettyDate(iso){const a=iso.split("-").map(Number);return a[2]+"/"+a[1];}
+
+/* ---- DB write helpers (optimistic: UI already updated S) ---- */
+function banner(msg){const b=document.getElementById("banner");b.textContent=msg;b.style.display="block";clearTimeout(banner._t);banner._t=setTimeout(()=>b.style.display="none",4500);}
+function dbErr(e){console.error(e);banner("Save failed: "+((e&&e.message)||e)+" — press Reload.");}
+async function dbInsert(table,row){const {error}=await sb.from(table).insert(row);if(error)dbErr(error);}
+async function dbUpdate(table,id,patch){const {error}=await sb.from(table).update(patch).eq("id",id);if(error)dbErr(error);}
+async function dbDelete(table,id){const {error}=await sb.from(table).delete().eq("id",id);if(error)dbErr(error);}
+
+/* ---- row mappers (S object -> DB row) ---- */
+function tsRow(e){return {id:e.id,project_id:PROJECT_ID,person_id:e.personId,week_id:e.weekId,entry_date:e.date,
+  task_id:(e.alloc&&e.alloc!=="WASTAGE")?e.alloc:null,is_wastage:e.alloc==="WASTAGE",hours:+e.hours||0,note:e.note||null};}
+
+/* ============================================================
+   LOAD
+   ============================================================ */
+async function loadAll(){
+  const {data:projects,error:pe}=await sb.from("projects").select("*").order("created_at");
+  if(pe){dbErr(pe);return false;}
+  if(!projects||!projects.length){banner("No project found — run supabase-schema.sql then supabase-seed.sql.");return false;}
+  PROJECT_ID=projects[0].id;
+  document.getElementById("projUrl").textContent=SUPABASE_URL;
+  const [people,weeks,tasks,materials,ts,tm]=await Promise.all([
+    sb.from("people").select("*").eq("project_id",PROJECT_ID),
+    sb.from("weeks").select("*").eq("project_id",PROJECT_ID),
+    sb.from("tasks").select("*").eq("project_id",PROJECT_ID).order("sort_order"),
+    sb.from("materials").select("*").eq("project_id",PROJECT_ID),
+    sb.from("timesheet_entries").select("*").eq("project_id",PROJECT_ID),
+    sb.from("task_materials").select("*").eq("project_id",PROJECT_ID)
+  ]);
+  for(const r of [people,weeks,tasks,materials,ts,tm])if(r.error){dbErr(r.error);return false;}
+  S.people=(people.data||[]).map(r=>({id:r.id,name:r.name,role:r.role||"",rate:+r.hourly_rate||0,active:r.active!==false,user_id:r.user_id||null,level:+r.role_level||1,
+    subInv:r.subcontract_invoicing===true,abn:r.abn||"",entity:r.entity_name||"",bsb:r.bank_bsb||"",acct:r.bank_account||"",acctName:r.bank_account_name||"",gstReg:r.gst_registered===true,
+    allowTravel:r.allow_travel===true,travelRate:+r.travel_rate||0,allowMeal:r.allow_meal===true,mealRate:+r.meal_rate||0,allowAccom:r.allow_accom===true,accomRate:+r.accom_rate||0}));
+  S.weeks=(weeks.data||[]).map(r=>({id:r.id,monday:r.monday}));
+  S.tasks=(tasks.data||[]).map(r=>({id:r.id,zone:r.zone,name:r.name,sort:r.sort_order}));
+  S.materials=(materials.data||[]).map(r=>({id:r.id,name:r.name,unit:r.unit||"each",cost:+r.unit_cost||0}));
+  S.timesheet=(ts.data||[]).map(r=>({id:r.id,personId:r.person_id,weekId:r.week_id,date:r.entry_date,
+    alloc:r.is_wastage?"WASTAGE":(r.task_id||""),hours:+r.hours||0,note:r.note||"",approved:r.approved===true,enteredBy:r.entered_by||null,approvedBy:r.approved_by||null}));
+  S.taskMaterials={};
+  (tm.data||[]).forEach(r=>{(S.taskMaterials[r.task_id]=S.taskMaterials[r.task_id]||[]).push({id:r.id,materialId:r.material_id||"",qty:+r.quantity||0});});
+  return true;
+}
+
+/* ============================================================
+   COST HELPERS (derived from S.timesheet)
+   ============================================================ */
+function rateOf(pid){const p=person(pid);return p?(+p.rate||0):0;}
+function labourForTask(tid){let c=0,h=0;S.timesheet.forEach(e=>{if(e.alloc===tid){const hr=+e.hours||0;h+=hr;c+=hr*rateOf(e.personId);}});return{cost:c,hours:h};}
+function materialForTask(tid){let c=0;(S.taskMaterials[tid]||[]).forEach(m=>{const mat=S.materials.find(x=>x.id===m.materialId);if(mat)c+=(+m.qty||0)*(+mat.cost||0);});return c;}
+function wastageTotals(){let c=0,h=0;S.timesheet.forEach(e=>{if(e.alloc==="WASTAGE"){const hr=+e.hours||0;h+=hr;c+=hr*rateOf(e.personId);}});return{cost:c,hours:h};}
+function unallocatedHours(){let h=0;S.timesheet.forEach(e=>{if(!e.alloc)h+=+e.hours||0;});return h;}
+function cellPeople(alloc,wid){const map={};S.timesheet.forEach(e=>{if(e.alloc===alloc&&e.weekId===wid){if(!(e.personId in map))map[e.personId]=0;map[e.personId]+=(+e.hours||0);}});return Object.keys(map).map(pid=>({pid,hours:map[pid]}));}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render(){renderHours();renderPeople();renderMaterials();renderSummary();renderSettings();}
+
+function renderHours(){
+  const op=document.getElementById("openPerson");
+  op.innerHTML=S.people.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  const ow=document.getElementById("openWeek");
+  ow.innerHTML=weeksSorted().map(w=>`<option value="${w.id}">w/c ${w.monday}</option>`).join("");
+  const ws=weeksSorted();
+  let h="<thead><tr><th class='taskth'>Item</th>"+ws.map(w=>`<th class='right'>w/c ${w.monday}</th>`).join("")+"<th class='right'>Total</th></tr></thead><tbody>";
+  ZONES.forEach(z=>{
+    h+=`<tr class='zone ${z}'><td colspan='${ws.length+2}'>${z}</td></tr>`;
+    S.tasks.filter(t=>t.zone===z).forEach(t=>{
+      let rowTot=0;let cells=ws.map(w=>{const c=cellHtml(t.id,w.id);rowTot+=c.total;return c.html;}).join("");
+      h+=`<tr><td class='task'>${esc(t.name)}</td>${cells}<td class='right num'><b>${rowTot?fmt1(rowTot):"·"}</b></td></tr>`;
+    });
+  });
+  let wTot=0;let wcells=ws.map(w=>{const c=cellHtml("WASTAGE",w.id);wTot+=c.total;return c.html;}).join("");
+  h+=`<tr><td class='task'><span class='pill W'>Wastage</span></td>${wcells}<td class='right num'><b>${wTot?fmt1(wTot):"·"}</b></td></tr>`;
+  h+="</tbody>";document.getElementById("gridTable").innerHTML=h;
+}
+function cellHtml(alloc,wid){
+  const ppl=cellPeople(alloc,wid);let total=ppl.reduce((a,p)=>a+p.hours,0);
+  let inner=ppl.map(p=>{const nm=esc((person(p.pid)||{}).name||"?");
+    return `<div class='cellline'><span class='nm'>${nm} <b>${fmt1(p.hours)}</b></span>
+      <button class='ed' title="Edit ${nm}'s week" onclick="openWeek('${p.pid}','${wid}')">&#9998;</button></div>`;}).join("");
+  inner+=addSel(alloc,wid);
+  if(total)inner+=`<div class='celltot'>${fmt1(total)} h</div>`;
+  return {html:`<td class='gcell'>${inner}</td>`,total};
+}
+function addSel(alloc,wid){
+  let o=`<option value="">&#43; add</option>`+S.people.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  return `<select class='cell-add' title='Add a person to this item' onchange="openWeekAddTask(this.value,'${wid}','${alloc}');this.value=''">${o}</select>`;
+}
+
+/* ---- modal: a person's week (only editor) ---- */
+function openWeek(pid,wid){MODAL={pid,wid};renderModal();document.getElementById("overlay").style.display="flex";}
+function closeModal(){MODAL=null;document.getElementById("overlay").style.display="none";renderHours();renderSummary();}
+function openWeekAddTask(pid,wid,alloc){
+  if(!pid)return;const wk=S.weeks.find(w=>w.id===wid);if(!wk)return;
+  const exists=S.timesheet.some(e=>e.personId===pid&&e.weekId===wid&&e.alloc===alloc);
+  if(!exists){const e={id:uuid(),personId:pid,weekId:wid,date:wk.monday,alloc,hours:0,note:"",enteredBy:MY_PERSON_ID};S.timesheet.push(e);dbInsert("timesheet_entries",tsRow(e));}
+  openWeek(pid,wid);
+}
+function renderModal(){
+  if(!MODAL)return;
+  const wk=S.weeks.find(w=>w.id===MODAL.wid);const p=person(MODAL.pid);
+  if(!wk||!p){closeModal();return;}
+  const pSel=S.people.filter(x=>x.active||x.id===MODAL.pid).map(x=>`<option value="${x.id}" ${x.id===MODAL.pid?"selected":""}>${esc(x.name)}</option>`).join("");
+  const wSel=weeksSorted().map(w=>`<option value="${w.id}" ${w.id===MODAL.wid?"selected":""}>w/c ${w.monday}</option>`).join("");
+  let h=`<div class='modalhead'><strong>Week of</strong>
+      <select class='big-sel' onchange="modalSet('pid',this.value)">${pSel}</select>
+      <select class='big-sel' onchange="modalSet('wid',this.value)">${wSel}</select>
+      <button class='modalclose' onclick="closeModal()">Done</button></div>
+    <p class='hint'>Editing <b>${esc(p.name)}</b>'s week. Every line must be allocated to a task or
+      <span class='pill W'>Wastage</span>. This popup is the only place hours are edited.</p>
+    <div class='days'>`;
+  for(let i=0;i<7;i++){
+    const date=isoAdd(wk.monday,i);
+    const entries=S.timesheet.filter(e=>e.personId===MODAL.pid&&e.date===date);
+    const dtot=entries.reduce((a,e)=>a+(+e.hours||0),0);
+    h+=`<div class='day ${i>=5?"weekend":""}'>
+      <div class='dhead'><span>${DAYNAMES[i]} <span class='dt'>${prettyDate(date)}</span></span><span class='dtot'>${fmt1(dtot)} h</span></div>
+      <div class='dbody'>`;
+    entries.forEach(e=>{
+      const cls=e.alloc==="WASTAGE"?"wastage":(!e.alloc?"empty":"");
+      const locked=e.approved, dis=locked?"disabled":"";
+      const canApproveThis=e.personId!==MY_PERSON_ID&&e.enteredBy!==MY_PERSON_ID;
+      const apprBtn = canApproveThis
+        ? (locked
+            ? `<button class='appr unappr' title='Approved — click to unlock' onclick="tsUnapprove('${e.id}')">&check;</button>`
+            : `<button class='appr' title='Approve this line' onclick="tsApprove('${e.id}')">approve</button>`)
+        : (locked ? `<span class='lockbadge'>&check; approved</span>` : ``);
+      const enN=(person(e.enteredBy)||{}).name, apN=e.approved?(person(e.approvedBy)||{}).name:"";
+      const stamp=(enN||apN)?`<div class='stamp'>${enN?"entered: "+esc(enN):""}${apN?(enN?" · ":"")+"approved: "+esc(apN):""}</div>`:"";
+      h+=`<div class='alloc ${cls} ${locked?"locked":""}'>
+        <select ${dis} onchange="tsSetAlloc('${e.id}',this.value)">${allocOpts(e.alloc)}</select>
+        <span class='hwrap'><label>hrs</label><input class='hrs' ${dis} type='number' min='0' step='0.25' value='${e.hours}' onchange="tsSetHours('${e.id}',this.value)"></span>
+        <input class='note' ${dis} placeholder='note' value='${esc(e.note)}' onchange="tsSetNote('${e.id}',this.value)">
+        ${locked?"":`<button class='del' onclick="tsDel('${e.id}')">&times;</button>`}
+        ${apprBtn}${stamp}</div>`;
+    });
+    h+=`<button class='addrow' onclick="tsAdd('${date}')">+ add line</button></div></div>`;
+  }
+  h+="</div>";
+  const wTot=sumWeek(MODAL.pid,MODAL.wid,null),wWaste=sumWeek(MODAL.pid,MODAL.wid,"WASTAGE"),wUn=sumWeek(MODAL.pid,MODAL.wid,"EMPTY");
+  h+=`<div class='weektot'><span>Week total: <b>${fmt1(wTot)} h</b></span>
+    <span class='muted'>Wastage: <b style='color:var(--warn)'>${fmt1(wWaste)} h</b></span>`;
+  if(wUn>0)h+=`<span style='color:var(--warn)'>&#9888; ${fmt1(wUn)} h not allocated</span>`;
+  h+=`<span class='flexspace'></span><span class='muted'>Labour value: <b>${fmt(wTot*(+p.rate||0))}</b></span></div>`;
+  document.getElementById("modalBody").innerHTML=h;
+}
+function sumWeek(pid,wid,filter){let h=0;S.timesheet.forEach(e=>{if(e.personId!==pid||e.weekId!==wid)return;
+  if(filter==="WASTAGE"&&e.alloc!=="WASTAGE")return;if(filter==="EMPTY"&&e.alloc)return;h+=+e.hours||0;});return h;}
+function modalSet(k,v){MODAL[k]=v;renderModal();}
+function allocOpts(sel){
+  let o=`<option value="" ${!sel?"selected":""}>&mdash; choose &mdash;</option>`;
+  o+=`<option value="WASTAGE" ${sel==="WASTAGE"?"selected":""}>&#9888; Wastage</option>`;
+  ZONES.forEach(z=>{o+=`<optgroup label="${z}">`;
+    S.tasks.filter(t=>t.zone===z).forEach(t=>o+=`<option value="${t.id}" ${t.id===sel?"selected":""}>${esc(t.name)}</option>`);o+="</optgroup>";});
+  return o;
+}
+
+/* ---- People ---- */
+function renderPeople(){
+  let h="<thead><tr><th>Name</th><th class='right'>Rate $/h</th><th>Active</th><th>Level</th><th></th></tr></thead><tbody>";
+  S.people.forEach((p,i)=>{
+    const editable=p.level<MY_LEVEL;
+    if(editable){
+      let opts="";for(let l=1;l<MY_LEVEL;l++)opts+=`<option value="${l}" ${p.level===l?"selected":""}>${ROLE_NAMES[l]}</option>`;
+      h+=`<tr>
+        <td><input class='txt' value='${esc(p.name)}' onchange="setPerson(${i},'name',this.value)"></td>
+        <td><input class='txt right' type='number' min='0' step='1' value='${p.rate}' onchange="setPerson(${i},'rate',this.value)"></td>
+        <td style='text-align:center'><input type='checkbox' ${p.active?"checked":""} onchange="setPerson(${i},'active',this.checked)"></td>
+        <td><select class='txt' style='width:110px' onchange="setPerson(${i},'level',this.value)">${opts}</select></td>
+        <td style='white-space:nowrap'><button class='sm' onclick="openInv(${i})">Invoicing${p.subInv?" ✓":""}</button> <button class='sm danger' onclick="delPerson(${i})">delete</button></td></tr>`;
+    }else{
+      h+=`<tr class='muted'>
+        <td>${esc(p.name)}${p.id===MY_PERSON_ID?" (you)":""}</td>
+        <td class='right num'>${p.rate}</td>
+        <td style='text-align:center'>${p.active?"✓":""}</td>
+        <td>${ROLE_NAMES[p.level]||p.level}</td>
+        <td></td></tr>`;
+    }
+  });
+  if(!S.people.length)h+="<tr><td colspan='5' class='muted'>No people yet.</td></tr>";
+  h+="</tbody>";document.getElementById("peopleTable").innerHTML=h;
+}
+
+/* ---- Materials ---- */
+function renderMaterials(){
+  let h="<thead><tr><th class='taskth'>Task</th><th>Materials (qty &times; item)</th><th class='right'>Cost</th></tr></thead><tbody>";
+  ZONES.forEach(z=>{h+=`<tr class='zone ${z}'><td colspan='3'>${z}</td></tr>`;
+    S.tasks.filter(t=>t.zone===z).forEach(t=>{const rows=S.taskMaterials[t.id]||[];
+      h+=`<tr><td class='task'>${esc(t.name)}</td><td>`;
+      rows.forEach((m,i)=>{h+=`<div class='alloc'>
+          <input class='hrs' style='width:54px' type='number' min='0' step='0.5' value='${m.qty}' onchange="setMatQty('${t.id}',${i},this.value)">
+          <select onchange="setMatId('${t.id}',${i},this.value)">${matOpts(m.materialId)}</select>
+          <button class='del' onclick="delMat('${t.id}',${i})">&times;</button></div>`;});
+      h+=`<button class='addrow' onclick="addMat('${t.id}')">+ material</button></td>`;
+      h+=`<td class='right num'>${fmt(materialForTask(t.id))}</td></tr>`;});});
+  h+="</tbody>";document.getElementById("matTable").innerHTML=h;
+}
+function matOpts(sel){let o="<option value=''>&mdash;</option>";
+  S.materials.forEach(m=>o+=`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)} (${esc(m.unit)}, ${fmt(m.cost)})</option>`);return o;}
+
+/* ---- Summary ---- */
+function renderSummary(){
+  let lab=0,mat=0,hrs=0;
+  S.tasks.forEach(t=>{const l=labourForTask(t.id);lab+=l.cost;hrs+=l.hours;mat+=materialForTask(t.id);});
+  const w=wastageTotals(),unal=unallocatedHours(),total=lab+mat+w.cost;
+  document.getElementById("kpis").innerHTML=`
+    <div class='card'><div class='lbl'>Total cost</div><div class='big'>${fmt(total)}</div><div class='tag'>incl. wastage labour</div></div>
+    <div class='card'><div class='lbl'>Task labour</div><div class='big'>${fmt(lab)}</div><div class='tag'>${fmt1(hrs)} h productive</div></div>
+    <div class='card'><div class='lbl'>Materials</div><div class='big'>${fmt(mat)}</div></div>
+    <div class='card warn'><div class='lbl'>Wastage</div><div class='big'>${fmt(w.cost)}</div><div class='tag'>${fmt1(w.hours)} h${unal?` · ${fmt1(unal)} h unallocated`:""}</div></div>`;
+  let zt="<thead><tr><th>Zone</th><th class='right'>Hours</th><th class='right'>Labour</th><th class='right'>Materials</th><th class='right'>Total</th></tr></thead><tbody>";
+  ZONES.forEach(z=>{let zl=0,zm=0,zh=0;S.tasks.filter(t=>t.zone===z).forEach(t=>{const l=labourForTask(t.id);zl+=l.cost;zh+=l.hours;zm+=materialForTask(t.id);});
+    zt+=`<tr><td><span class='pill ${z}'>${z}</span></td><td class='right num'>${fmt1(zh)}</td><td class='right num'>${fmt(zl)}</td><td class='right num'>${fmt(zm)}</td><td class='right num'><b>${fmt(zl+zm)}</b></td></tr>`;});
+  zt+=`<tr><td><span class='pill W'>Wastage</span></td><td class='right num'>${fmt1(w.hours)}</td><td class='right num'>${fmt(w.cost)}</td><td class='right num'>&mdash;</td><td class='right num'><b>${fmt(w.cost)}</b></td></tr>`;
+  zt+=`<tr><td><b>Total</b></td><td class='right num'><b>${fmt1(hrs+w.hours)}</b></td><td class='right num'><b>${fmt(lab+w.cost)}</b></td><td class='right num'><b>${fmt(mat)}</b></td><td class='right num'><b>${fmt(total)}</b></td></tr></tbody>`;
+  document.getElementById("zoneTable").innerHTML=zt;
+  let pt="<thead><tr><th>Person</th><th class='right'>Total h</th><th class='right'>Wastage h</th><th class='right'>Wastage %</th><th class='right'>Labour $</th></tr></thead><tbody>";
+  S.people.forEach(p=>{let th=0,wh=0;S.timesheet.forEach(e=>{if(e.personId===p.id){th+=+e.hours||0;if(e.alloc==="WASTAGE")wh+=+e.hours||0;}});
+    if(th>0)pt+=`<tr><td>${esc(p.name)}</td><td class='right num'>${fmt1(th)}</td><td class='right num'>${fmt1(wh)}</td><td class='right num'>${th?Math.round(wh/th*100):0}%</td><td class='right num'>${fmt(th*(+p.rate||0))}</td></tr>`;});
+  pt+="</tbody>";document.getElementById("personTable").innerHTML=pt;
+  let ct="<thead><tr><th>Task</th><th>Zone</th><th class='right'>Hours</th><th class='right'>Labour</th><th class='right'>Materials</th><th class='right'>Total</th></tr></thead><tbody>";
+  let any=false;
+  ZONES.forEach(z=>S.tasks.filter(t=>t.zone===z).forEach(t=>{const l=labourForTask(t.id);const m=materialForTask(t.id);
+    if(l.hours||m){any=true;ct+=`<tr><td>${esc(t.name)}</td><td><span class='pill ${z}'>${z}</span></td><td class='right num'>${fmt1(l.hours)}</td><td class='right num'>${fmt(l.cost)}</td><td class='right num'>${fmt(m)}</td><td class='right num'><b>${fmt(l.cost+m)}</b></td></tr>`;}}));
+  if(!any)ct+="<tr><td colspan='6' class='muted'>No costs yet — add hours via Weekly hours and materials on the Materials tab.</td></tr>";
+  ct+="</tbody>";document.getElementById("taskCostTable").innerHTML=ct;
+}
+
+/* ---- Settings ---- */
+function renderSettings(){
+  let mt="<thead><tr><th>Material</th><th>Unit</th><th class='right'>Unit cost $</th><th></th></tr></thead><tbody>";
+  S.materials.forEach((m,i)=>{mt+=`<tr><td><input class='txt' value='${esc(m.name)}' onchange="setMat(${i},'name',this.value)"></td>
+    <td><input class='txt' style='width:80px' value='${esc(m.unit)}' onchange="setMat(${i},'unit',this.value)"></td>
+    <td><input class='txt right' type='number' min='0' step='0.5' value='${m.cost}' onchange="setMat(${i},'cost',this.value)"></td>
+    <td><button class='sm danger' onclick="delCatMat(${i})">delete</button></td></tr>`;});
+  mt+="</tbody>";document.getElementById("matCatTable").innerHTML=mt;
+  let tt="<thead><tr><th>Task</th><th>Zone</th><th></th></tr></thead><tbody>";
+  S.tasks.forEach((t,i)=>{tt+=`<tr><td><input class='txt' value='${esc(t.name)}' onchange="setTask(${i},'name',this.value)"></td>
+    <td><select class='txt' style='width:80px' onchange="setTask(${i},'zone',this.value)">${ZONES.map(z=>`<option ${z===t.zone?"selected":""}>${z}</option>`).join("")}</select></td>
+    <td><button class='sm danger' onclick="delTask(${i})">delete</button></td></tr>`;});
+  tt+="</tbody>";document.getElementById("taskTable").innerHTML=tt;
+}
+
+/* ============================================================
+   ACTIONS  (update S, render, write to DB)
+   ============================================================ */
+// timesheet (popup)
+function tsFind(id){return S.timesheet.find(e=>e.id===id);}
+function tsAdd(date){if(!MODAL)return;const e={id:uuid(),personId:MODAL.pid,weekId:MODAL.wid,date,alloc:"",hours:0,note:"",enteredBy:MY_PERSON_ID};S.timesheet.push(e);renderModal();dbInsert("timesheet_entries",tsRow(e));}
+function tsDel(id){S.timesheet=S.timesheet.filter(e=>e.id!==id);renderModal();dbDelete("timesheet_entries",id);}
+function tsSetAlloc(id,v){const e=tsFind(id);e.alloc=v;e.enteredBy=MY_PERSON_ID;renderModal();dbUpdate("timesheet_entries",id,{task_id:(v&&v!=="WASTAGE")?v:null,is_wastage:v==="WASTAGE"});}
+function tsSetHours(id,v){const e=tsFind(id);e.hours=+v||0;e.enteredBy=MY_PERSON_ID;renderModal();dbUpdate("timesheet_entries",id,{hours:e.hours});}
+function tsSetNote(id,v){const e=tsFind(id);e.note=v;e.enteredBy=MY_PERSON_ID;renderModal();dbUpdate("timesheet_entries",id,{note:v||null});}
+function tsApprove(id){const e=tsFind(id);if(!CAN_APPROVE||!e||e.personId===MY_PERSON_ID||e.enteredBy===MY_PERSON_ID)return;e.approved=true;e.approvedBy=MY_PERSON_ID;renderModal();dbUpdate("timesheet_entries",id,{approved:true,approved_by:MY_PERSON_ID,approved_at:new Date().toISOString()});}
+function tsUnapprove(id){const e=tsFind(id);if(!CAN_APPROVE||!e||e.personId===MY_PERSON_ID||e.enteredBy===MY_PERSON_ID)return;e.approved=false;e.approvedBy=null;renderModal();dbUpdate("timesheet_entries",id,{approved:false,approved_by:null,approved_at:null});}
+
+// people
+function setPerson(i,k,v){const p=S.people[i];
+  if(p.level>=MY_LEVEL){alert("You can only change people below your level.");renderPeople();return;}
+  if(k==="rate")v=+v||0;
+  if(k==="level"){v=+v||1;if(v>=MY_LEVEL){alert("You can only set a level below your own.");renderPeople();return;}}
+  p[k]=v;
+  dbUpdate("people",p.id,{name:p.name,hourly_rate:+p.rate||0,active:!!p.active,role_level:p.level});
+  (k==="name"||k==="active"||k==="level")?render():renderSummary();}
+
+let INV_I=null;
+function openInv(i){INV_I=i;renderInv();document.getElementById("invOverlay").style.display="flex";}
+function closeInv(){INV_I=null;document.getElementById("invOverlay").style.display="none";renderPeople();}
+function invSet(k,v){const p=S.people[INV_I];if(!p)return;
+  if(p.level>=MY_LEVEL){alert("You can only change people below your level.");return;}
+  if(["travelRate","mealRate","accomRate"].includes(k))v=+v||0;
+  p[k]=v;
+  dbUpdate("people",p.id,{subcontract_invoicing:!!p.subInv,abn:p.abn||null,entity_name:p.entity||null,
+    bank_bsb:p.bsb||null,bank_account:p.acct||null,bank_account_name:p.acctName||null,gst_registered:!!p.gstReg,
+    allow_travel:!!p.allowTravel,travel_rate:+p.travelRate||0,allow_meal:!!p.allowMeal,meal_rate:+p.mealRate||0,
+    allow_accom:!!p.allowAccom,accom_rate:+p.accomRate||0});
+  renderInv();
+}
+function renderInv(){
+  const p=S.people[INV_I];if(!p){closeInv();return;}
+  const row=(lbl,inner)=>`<div style='display:flex;gap:10px;align-items:center;margin:6px 0'><div style='flex:0 0 150px;color:var(--muted);font-size:13px'>${lbl}</div><div style='flex:1'>${inner}</div></div>`;
+  const allow=(lbl,onKey,rateKey)=>`<div style='display:flex;gap:8px;align-items:center;margin:5px 0'>
+      <label style='flex:1'><input type='checkbox' ${p[onKey]?"checked":""} onchange="invSet('${onKey}',this.checked)"> ${lbl}</label>
+      <span class='muted' style='font-size:12px'>rate $</span>
+      <input class='txt right' style='width:90px' type='number' min='0' step='0.5' value='${p[rateKey]}' ${p[onKey]?"":"disabled"} onchange="invSet('${rateKey}',this.value)"></div>`;
+  let h=`<div class='row-inline'><h2 style='margin:0'>Invoicing — ${esc(p.name)}</h2><span class='flexspace'></span><button class='modalclose' onclick="closeInv()">Done</button></div>
+    <label style='display:block;margin:10px 0;font-weight:600'><input type='checkbox' ${p.subInv?"checked":""} onchange="invSet('subInv',this.checked)"> Subcontract invoicing enabled</label>`;
+  if(p.subInv){
+    h+=`<div class='panel' style='box-shadow:none;margin:0'>
+      <h2 style='font-size:13px'>Supplier details</h2>
+      ${row("Entity name",`<input class='txt' value='${esc(p.entity)}' onchange="invSet('entity',this.value)">`)}
+      ${row("ABN",`<input class='txt' value='${esc(p.abn)}' onchange="invSet('abn',this.value)">`)}
+      ${row("GST registered",`<input type='checkbox' ${p.gstReg?"checked":""} onchange="invSet('gstReg',this.checked)"> <span class='muted' style='font-size:12px'>adds 10% GST to their invoices</span>`)}
+      ${row("Bank BSB",`<input class='txt' value='${esc(p.bsb)}' onchange="invSet('bsb',this.value)">`)}
+      ${row("Account no.",`<input class='txt' value='${esc(p.acct)}' onchange="invSet('acct',this.value)">`)}
+      ${row("Account name",`<input class='txt' value='${esc(p.acctName)}' onchange="invSet('acctName',this.value)">`)}
+    </div>
+    <div class='panel' style='box-shadow:none;margin:10px 0 0'>
+      <h2 style='font-size:13px'>Allowances (claimed as quantity × rate)</h2>
+      ${allow("Travel allowance","allowTravel","travelRate")}
+      ${allow("Meal allowance","allowMeal","mealRate")}
+      ${allow("Accommodation allowance","allowAccom","accomRate")}
+    </div>`;
+  }
+  document.getElementById("invBody").innerHTML=h;
+}
+document.getElementById("invOverlay").addEventListener("click",e=>{if(e.target.id==="invOverlay")closeInv();});
+function delPerson(i){const p=S.people[i];if(!confirm("Delete "+p.name+"? Their timesheet history is removed too."))return;
+  S.people.splice(i,1);S.timesheet=S.timesheet.filter(e=>e.personId!==p.id);dbDelete("people",p.id);render();}
+
+// task materials
+function addMat(tid){const m={id:uuid(),materialId:"",qty:0};(S.taskMaterials[tid]=S.taskMaterials[tid]||[]).push(m);renderMaterials();dbInsert("task_materials",{id:m.id,project_id:PROJECT_ID,task_id:tid,material_id:null,quantity:0});}
+function delMat(tid,i){const m=S.taskMaterials[tid][i];S.taskMaterials[tid].splice(i,1);if(!S.taskMaterials[tid].length)delete S.taskMaterials[tid];renderMaterials();renderSummary();dbDelete("task_materials",m.id);}
+function setMatId(tid,i,v){const m=S.taskMaterials[tid][i];m.materialId=v;renderMaterials();renderSummary();dbUpdate("task_materials",m.id,{material_id:v||null});}
+function setMatQty(tid,i,v){const m=S.taskMaterials[tid][i];m.qty=+v||0;renderMaterials();renderSummary();dbUpdate("task_materials",m.id,{quantity:m.qty});}
+
+// catalogue
+function setMat(i,k,v){const m=S.materials[i];if(k==="cost")v=+v||0;m[k]=v;
+  dbUpdate("materials",m.id,{name:m.name,unit:m.unit||"each",unit_cost:+m.cost||0});renderMaterials();renderSummary();}
+function delCatMat(i){const m=S.materials[i];if(!confirm("Delete material from catalogue?"))return;
+  S.materials.splice(i,1);Object.keys(S.taskMaterials).forEach(t=>S.taskMaterials[t].forEach(x=>{if(x.materialId===m.id)x.materialId="";}));
+  dbDelete("materials",m.id);render();}
+
+// tasks
+function setTask(i,k,v){const t=S.tasks[i];t[k]=v;dbUpdate("tasks",t.id,{zone:t.zone,name:t.name});render();}
+function delTask(i){const t=S.tasks[i];if(!confirm("Delete task "+t.name+"? Lines pointing to it become unallocated."))return;
+  S.tasks.splice(i,1);S.timesheet.forEach(e=>{if(e.alloc===t.id)e.alloc="";});delete S.taskMaterials[t.id];dbDelete("tasks",t.id);render();}
+function addTask(){const z=prompt("Zone (L2, L1E or L1W):","L2");if(!z)return;if(!ZONES.includes(z))return alert("Zone must be L2, L1E or L1W");
+  const n=prompt("Task name:");if(!n)return;const t={id:uuid(),zone:z,name:n,sort:(S.tasks.length+1)};S.tasks.push(t);
+  dbInsert("tasks",{id:t.id,project_id:PROJECT_ID,zone:z,name:n,sort_order:t.sort});render();}
+
+/* ============================================================
+   WIRING
+   ============================================================ */
+document.getElementById("btnOpenWeek").onclick=()=>{const pid=document.getElementById("openPerson").value,wid=document.getElementById("openWeek").value;if(pid&&wid)openWeek(pid,wid);};
+document.getElementById("btnAddWeek").onclick=()=>{const d=prompt("Week commencing — Monday date (YYYY-MM-DD):");if(!d)return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return alert("Use format YYYY-MM-DD");if(S.weeks.some(w=>w.monday===d))return alert("That week already exists.");
+  const w={id:uuid(),monday:d};S.weeks.push(w);dbInsert("weeks",{id:w.id,project_id:PROJECT_ID,monday:d});renderHours();renderSummary();};
+document.getElementById("btnAddPerson").onclick=()=>{const p={id:uuid(),name:"New person",rate:50,role:"",active:true,level:1,user_id:null};S.people.push(p);
+  dbInsert("people",{id:p.id,project_id:PROJECT_ID,name:p.name,role:null,hourly_rate:50,active:true,role_level:1});render();};
+document.getElementById("btnAddMat").onclick=()=>{const m={id:uuid(),name:"New material",unit:"each",cost:0};S.materials.push(m);
+  dbInsert("materials",{id:m.id,project_id:PROJECT_ID,name:m.name,unit:"each",unit_cost:0});render();};
+document.getElementById("btnAddTask").onclick=addTask;
+document.getElementById("btnAddTaskMat").onclick=addTask;
+document.getElementById("overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeModal();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&MODAL)closeModal();});
+
+document.getElementById("btnExport").onclick=()=>{const b=new Blob([JSON.stringify(S,null,2)],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="armstrong-creek-backup.json";a.click();};
+document.getElementById("btnReload").onclick=async()=>{showLoading(true);await loadAll();render();if(MODAL)renderModal();showLoading(false);banner("Reloaded from Supabase.");};
+document.getElementById("btnSignout").onclick=async()=>{await sb.auth.signOut();location.reload();};
+document.getElementById("crewSignout").onclick=async()=>{await sb.auth.signOut();location.reload();};
+document.getElementById("btnCsvTs").onclick=()=>{let rows=[["Date","Day","Person","Allocation","Zone","Hours","Rate","Labour $","Note"]];
+  [...S.timesheet].sort((a,b)=>a.date<b.date?-1:1).forEach(e=>{const p=person(e.personId);
+    const al=e.alloc==="WASTAGE"?"Wastage":((task(e.alloc)||{}).name||"(unallocated)");const zone=e.alloc==="WASTAGE"?"":((task(e.alloc)||{}).zone||"");
+    const dn=DAYNAMES[(new Date(e.date).getDay()+6)%7];
+    rows.push([e.date,dn,(p||{}).name||"",al,zone,e.hours,(p||{}).rate||0,((+e.hours||0)*((p||{}).rate||0)).toFixed(2),e.note||""]);});
+  dlCsv("armstrong-creek-timesheet.csv",rows);};
+document.getElementById("btnCsv").onclick=()=>{let rows=[["Zone","Task","Hours","Labour cost","Material cost","Total cost"]];
+  ZONES.forEach(z=>S.tasks.filter(t=>t.zone===z).forEach(t=>{const l=labourForTask(t.id);const m=materialForTask(t.id);
+    rows.push([z,t.name,l.hours,l.cost.toFixed(2),m.toFixed(2),(l.cost+m).toFixed(2)]);}));
+  const w=wastageTotals();rows.push(["","Wastage",w.hours,w.cost.toFixed(2),"0.00",w.cost.toFixed(2)]);dlCsv("armstrong-creek-costing.csv",rows);};
+function dlCsv(name,rows){const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const b=new Blob([csv],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click();}
+
+document.getElementById("tabs").addEventListener("click",e=>{const b=e.target.closest(".tab");if(!b)return;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  b.classList.add("active");document.getElementById("v-"+b.dataset.v).classList.add("active");
+  if(b.dataset.v==="summary")renderSummary();if(b.dataset.v==="hours")renderHours();});
+
+/* ---- auth + boot ---- */
+function showLoading(on){document.getElementById("loading").style.display=on?"flex":"none";}
+function showLogin(on){document.getElementById("login").style.display=on?"flex":"none";}
+async function start(session){
+  showLogin(false);showLoading(true);
+  MY_UID=(session&&session.user&&session.user.id)||null;
+  document.getElementById("who").textContent=(session&&session.user&&session.user.email)||"";
+  const ok=await loadAll();
+  if(ok){
+    const me=S.people.find(p=>p.user_id&&p.user_id===MY_UID);
+    MY_LEVEL=me?me.level:0; MY_PERSON_ID=me?me.id:null;
+    IS_ADMIN=MY_LEVEL>=4; CAN_SEE_COSTS=MY_LEVEL>=3; CAN_APPROVE=MY_LEVEL>=2;
+    if(!CAN_SEE_COSTS){showLoading(false);document.getElementById("crewNote").style.display="flex";return;}
+    render();
+  }
+  showLoading(false);
+}
+document.getElementById("loginForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;
+  document.getElementById("loginErr").textContent="";document.getElementById("loginBtn").disabled=true;
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  document.getElementById("loginBtn").disabled=false;
+  if(error){document.getElementById("loginErr").textContent=error.message;return;}
+  start(data.session);
+});
+(async function boot(){
+  showLoading(true);
+  try{const {data}=await sb.auth.getSession();
+    if(data&&data.session){await start(data.session);}else{showLoading(false);showLogin(true);}
+  }catch(e){showLoading(false);showLogin(true);}
+})();
+</script>
+</body>
+</html>
